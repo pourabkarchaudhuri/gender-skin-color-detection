@@ -3,7 +3,7 @@ import detect_skintone
 from flask import Flask, request, jsonify
 import os
 from werkzeug.utils import secure_filename
-
+import time
 from keras.preprocessing.image import img_to_array
 from keras.models import load_model
 import numpy as np
@@ -47,10 +47,11 @@ factor = 0.709 # scale factor
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = set(['jpeg', 'jpg', 'png'])
-
+current_milli_time = lambda: int(round(time.time() * 1000))
 @app.route('/detect', methods=['POST'])
-def post_example():
+def process_image():
     count = 0
+    stamp = str(current_milli_time())
     global model, classes, minsize, threshold, factor
     if not request.headers.get('Content-type') is None:
         if(request.headers.get('Content-type').split(';')[0] == 'multipart/form-data'):
@@ -60,10 +61,17 @@ def post_example():
                 # if user does not select file, browser also
                 # submit a empty part without filename
                 if file.filename == '':
-                    return jsonify('no image received')
+                    result = {
+                        "error":True,
+                        "message": "No Image Recieved",
+                        "gender":None,
+                        "skin": None
+                    }
+                    return jsonify(result)
                 filename = secure_filename(file.filename)
                 # file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], "face_photo.jpg"))
+                
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], "photo_"+stamp+".jpg"))
 
             else:
                 return jsonify(get_status_code("Invalid body", "Please provide valid format for Image 2")), 415
@@ -73,12 +81,35 @@ def post_example():
             else:
                 print("Application/Json upload as base64")
                 body = request.get_json()
-                img_string = body['image_string']
-                str_image = img_string.split(',')[1]
-                imgdata = base64.b64decode(str_image)
-                # img = "static\\uploaded\\" +  str(int(round(time.time() * 1000))) + "image_file.jpg"
-                with open(os.path.join(UPLOAD_FOLDER, "face_photo.jpg"), 'wb') as f:
-                    f.write(imgdata)
+                if 'image_string' in body.keys():
+                    img_string = body['image_string']
+                    try:
+                        str_image = img_string.split(',')[1]
+                        imgdata = base64.b64decode(str_image)
+                    
+                        with open(os.path.join(UPLOAD_FOLDER, "photo_"+stamp+".jpg"), 'wb') as f:
+                            f.write(imgdata)
+                        
+                    except IndexError:
+                        result = {
+                            "error":True,
+                            "message": "Invalid base64 string",
+                            "gender":None,
+                            "skin": None
+                        }
+                        return jsonify(result)
+                    
+                    
+                    
+                else:
+                    result = {
+                        "error":True,
+                        "message": "Put 'image_string' as key in input payload",
+                        "gender":None,
+                        "skin": None
+                    }
+                    return jsonify(result)
+
         else:
             return jsonify(get_status_code("Invalid header", "Please provide correct header with correct data")), 415
     
@@ -87,8 +118,8 @@ def post_example():
 
 
 
-    print("File to be processed : {}".format(os.path.join(UPLOAD_FOLDER, "face_photo.jpg")))
-    root_image = cv2.imread(os.path.join(UPLOAD_FOLDER, "face_photo.jpg"))
+    print("File to be processed : {}".format(os.path.join(UPLOAD_FOLDER, "photo_"+stamp+".jpg")))
+    root_image = cv2.imread(os.path.join(UPLOAD_FOLDER, "photo_"+stamp+".jpg"))
     
     if root_image is None:
         print("Could not read input image")
@@ -126,7 +157,7 @@ def post_example():
             if(float(boxes[i][4]) >= 0.95):
                 sub_faces = root_image[y:h, x:w]
                 count = count + 1
-                cv2.imwrite(os.path.join(os.getcwd(), 'uploads', "face_photo.jpg"), sub_faces)
+                cv2.imwrite(os.path.join(os.getcwd(), 'uploads', "photo_"+stamp+".jpg"), sub_faces)
             else:
                 print("No faces detected")
                 count = 0
@@ -151,6 +182,7 @@ def post_example():
 
         result = {
             "error":False,
+            "message":None,
             "gender":{
                 "type":label,
                 "confidence":confidence[idx] * 100
