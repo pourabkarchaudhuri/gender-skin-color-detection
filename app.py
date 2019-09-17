@@ -14,7 +14,8 @@ import cv2
 import base64
 os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
-
+def RGB2HEX(color):
+    return "#{:02x}{:02x}{:02x}".format(int(color[0]), int(color[1]), int(color[2]))
 
 MODEL_DIR = os.path.join(os.getcwd(), 'models', 'gender_classification.model')
 TEST_PATH = os.path.join(os.getcwd(), 'uploads', 'sample_input1.jpg')
@@ -84,8 +85,8 @@ def process_image():
                 if 'image_string' in body.keys():
                     img_string = body['image_string']
                     try:
-                        str_image = img_string.split(',')[1]
-                        imgdata = base64.b64decode(str_image)
+                        # str_image = img_string.split(',')[1]
+                        imgdata = base64.b64decode(img_string)
                     
                         with open(os.path.join(UPLOAD_FOLDER, "photo_"+stamp+".jpg"), 'wb') as f:
                             f.write(imgdata)
@@ -154,6 +155,8 @@ def process_image():
             p1 = int(boxes[0][2])
             p2 = int(boxes[0][3])
             
+            
+            print(float(boxes[i][4]))
             if(float(boxes[i][4]) >= 0.95):
                 sub_faces = root_image[y:h, x:w]
                 count = count + 1
@@ -178,7 +181,14 @@ def process_image():
             "skin": None
         }
     else:
-        skin_tone = detect_skintone.get_skin_tone(root_image)
+        skin_tone = detect_skintone.get_skin_tone(sub_faces)
+        hex_colors = list()
+        for element in skin_tone:
+            print(element['color'])
+            obtained_hexcolor = RGB2HEX(element['color'])
+            hex_colors.append(obtained_hexcolor)
+
+        # print(hex_colors)
 
         result = {
             "error":False,
@@ -187,7 +197,7 @@ def process_image():
                 "type":label,
                 "confidence":confidence[idx] * 100
             },
-            "skin": skin_tone
+            "skin": hex_colors
         }
     
     return jsonify(result)
